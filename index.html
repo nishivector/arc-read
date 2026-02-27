@@ -15,9 +15,9 @@
 </script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #7A3060; overflow: hidden; font-family: 'Courier New', monospace; }
+  body { background: #7A3060; overflow: hidden; touch-action: none; font-family: 'Courier New', monospace; }
   #threeCanvas {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0;
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; touch-action: none;
   }
   #overlay2d {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -1648,11 +1648,9 @@ function triggerWin() {
 // ─── INPUT HANDLING ──────────────────────────────────────────────────────────
 function getPointerPos(e) {
   const rect = overlay.getBoundingClientRect();
-  const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
-  const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
   return {
-    x: clientX - rect.left,
-    y: clientY - rect.top
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top
   };
 }
 
@@ -1774,6 +1772,7 @@ function resetGame() {
 window.addEventListener('resize', () => {
   renderer.setSize(W(), H());
   camera.aspect = W() / H();
+  camera.fov = camera.aspect < 1 ? Math.min(50 / camera.aspect, 90) : 50;
   camera.updateProjectionMatrix();
   resizeOverlay();
   generateCity();
