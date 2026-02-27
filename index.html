@@ -112,9 +112,10 @@
     width: 14px; height: 14px;
     clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
     background: #4DFFD6;
+    filter: drop-shadow(0 0 4px #4DFFD6);
     transition: transform 0.15s ease, opacity 0.15s ease;
   }
-  .ammoPip.spent { background: transparent; outline: 1px solid rgba(77,255,214,0.3); opacity: 0.3; }
+  .ammoPip.spent { background: transparent; outline: 1px solid rgba(77,255,214,0.3); opacity: 0.3; filter: none; }
   #gameOverScreen, #winScreen {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     z-index: 20; display: none; flex-direction: column;
@@ -244,9 +245,6 @@
 
 <script type="module">
 import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
 // ─── GLOBAL STATE ───────────────────────────────────────────────────────────
 const W = () => window.innerWidth;
@@ -296,8 +294,6 @@ const canvas3d = document.getElementById('threeCanvas');
 const renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true });
 renderer.setSize(W(), H());
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x7A3060);
@@ -306,24 +302,9 @@ const camera = new THREE.PerspectiveCamera(50, W() / H(), 0.1, 2000);
 camera.position.set(0, 520, 280);
 camera.lookAt(0, 0, 0);
 
-// Bloom composer
-const composer = new EffectComposer(renderer);
-const renderPass = new RenderPass(scene, camera);
-composer.addPass(renderPass);
-const bloomPass = new UnrealBloomPass(
-  new THREE.Vector2(W(), H()),
-  1.4, 0.6, 0.35
-);
-composer.addPass(bloomPass);
-
 // Ambient light for scene
 const ambientLight = new THREE.AmbientLight(0x7A3060, 0.5);
 scene.add(ambientLight);
-
-// Subtle point light for atmosphere
-const ptLight = new THREE.PointLight(0x4DFFD6, 0.3, 500);
-ptLight.position.set(0, 50, 0);
-scene.add(ptLight);
 
 // ─── 2D OVERLAY CANVAS ──────────────────────────────────────────────────────
 const overlay = document.getElementById('overlay2d');
@@ -511,10 +492,10 @@ function getBezierControl(x0, y0, x1, y1) {
   const mx = (x0 + x1) / 2;
   const my = (y0 + y1) / 2;
   const dx = x1 - x0, dy = y1 - y0;
-  const len = Math.sqrt(dx * dx + dy * dy);
-  // Perpendicular leftward bow
-  const px = -dy / (len || 1), py = dx / (len || 1);
-  const bow = 80 * (W() / 1280);
+  const chordLength = Math.sqrt(dx * dx + dy * dy);
+  // Perpendicular leftward bow — proportional to chord length
+  const px = -dy / (chordLength || 1), py = dx / (chordLength || 1);
+  const bow = chordLength * 0.18;
   return { cx: mx + px * bow, cy: my + py * bow };
 }
 
@@ -925,11 +906,11 @@ function drawCity() {
     const buildingDark = light.buildingIdx < Math.floor(cityBlocks.length * darkFraction);
     if (buildingDark) continue;
 
-    const flicker = Math.sin(flickerTime * light.flickerRate * 2 * Math.PI) > 0;
-    if (light.on && flicker) {
-      ctx.globalAlpha = 0.6;
-      ctx.fillStyle = '#F0EBD8';
-      ctx.fillRect(light.x, light.y, 4, 4);
+    const flicker = Math.max(0.3, Math.sin(flickerTime * light.flickerRate * 2 * Math.PI));
+    if (light.on) {
+      ctx.globalAlpha = 0.9 * flicker;
+      ctx.fillStyle = '#FFE8A0';
+      ctx.fillRect(light.x, light.y, 6, 8);
     }
     ctx.globalAlpha = 1;
   }
@@ -958,13 +939,15 @@ function drawEnemies(dt) {
     const angle = Math.atan2(e.vy, e.vx) - Math.PI / 2;
     if (e.type !== 'cruiser') ctx.rotate(angle);
 
-    ctx.strokeStyle = '#F0EBD8';
     ctx.fillStyle = 'transparent';
 
     if (e.type === 'cruiser') {
       // Elongated rhombus
       const w = 28 * scaleRef, h = 14 * scaleRef;
       ctx.lineWidth = 2;
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = '#F0EBD8';
+      ctx.strokeStyle = '#F0EBD8';
       ctx.beginPath();
       ctx.moveTo(0, -h);
       ctx.lineTo(w / 2, 0);
@@ -973,16 +956,22 @@ function drawEnemies(dt) {
       ctx.closePath();
       ctx.stroke();
       // Engine glow dots
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = '#4DFFD6';
       ctx.fillStyle = '#4DFFD6';
       for (let i = 0; i < 4; i++) {
         ctx.beginPath();
         ctx.arc(-w / 4 + i * (w / 6), h * 0.6, 2 * scaleRef, 0, Math.PI * 2);
         ctx.fill();
       }
+      ctx.shadowBlur = 0;
     } else if (e.type === 'fighter') {
       // Arrowhead
       const w = 16 * scaleRef, h = 10 * scaleRef;
       ctx.lineWidth = 1.5;
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = '#F0EBD8';
+      ctx.strokeStyle = '#F0EBD8';
       ctx.beginPath();
       ctx.moveTo(0, -h);
       ctx.lineTo(w / 2, h);
@@ -990,12 +979,15 @@ function drawEnemies(dt) {
       ctx.lineTo(-w / 2, h);
       ctx.closePath();
       ctx.stroke();
+      ctx.shadowBlur = 0;
     } else if (e.type === 'bomber') {
       // Wide delta
       const w = 36 * scaleRef, h = 20 * scaleRef;
       ctx.lineWidth = 2.5;
       const armedAlpha = e.armed ? 0.6 + 0.4 * Math.sin(flickerTime * 1.2 * 2 * Math.PI) : 1;
       ctx.strokeStyle = e.armed ? `rgba(255,107,53,${armedAlpha})` : '#F0EBD8';
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = e.armed ? '#FF6B35' : '#F0EBD8';
       ctx.beginPath();
       ctx.moveTo(0, -h);
       ctx.lineTo(w / 2, h * 0.5);
@@ -1004,10 +996,14 @@ function drawEnemies(dt) {
       ctx.lineTo(-w / 2, h * 0.5);
       ctx.closePath();
       ctx.stroke();
+      ctx.shadowBlur = 0;
     } else if (e.type === 'interceptor') {
       // Same as fighter but slightly larger
       const w = 12 * scaleRef, h = 8 * scaleRef;
       ctx.lineWidth = 1.5;
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = '#F0EBD8';
+      ctx.strokeStyle = '#F0EBD8';
       ctx.beginPath();
       ctx.moveTo(0, -h);
       ctx.lineTo(w / 2, h);
@@ -1015,6 +1011,7 @@ function drawEnemies(dt) {
       ctx.lineTo(-w / 2, h);
       ctx.closePath();
       ctx.stroke();
+      ctx.shadowBlur = 0;
     } else if (e.type === 'missile') {
       // Dart
       ctx.restore();
@@ -1023,6 +1020,8 @@ function drawEnemies(dt) {
       const mAngle = Math.atan2(e.vy, e.vx) - Math.PI / 2;
       ctx.rotate(mAngle);
       const mw = 8 * scaleRef, mh = 4 * scaleRef;
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = '#4DFFD6';
       ctx.fillStyle = '#4DFFD6';
       ctx.beginPath();
       ctx.moveTo(0, -mh);
@@ -1039,6 +1038,7 @@ function drawEnemies(dt) {
       ctx.lineTo(0, mh + 12 * scaleRef);
       ctx.stroke();
       ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
     }
 
     ctx.restore();
@@ -1049,7 +1049,9 @@ function drawInterceptors() {
   const scaleRef = Math.min(W() / 1280, H() / 720);
   for (const intp of interceptors) {
     if (!intp.alive) continue;
-    // Trail
+    // Trail with cyan glow
+    ctx.shadowBlur = 18;
+    ctx.shadowColor = '#4DFFD6';
     for (let i = 0; i < intp.trail.length; i++) {
       const pt = intp.trail[i];
       const alpha = (i / intp.trail.length) * 1.0;
@@ -1065,17 +1067,21 @@ function drawInterceptors() {
     }
     ctx.globalAlpha = 1;
 
-    // Current position - diamond
+    // Current position - diamond with glow
     const cur = bezierPoint(intp.t, intp.x0, intp.y0, intp.cx, intp.cy, intp.x1, intp.y1);
     const s = 6 * scaleRef;
     ctx.fillStyle = '#4DFFD6';
+    ctx.shadowBlur = 18;
+    ctx.shadowColor = '#4DFFD6';
     ctx.save();
     ctx.translate(cur.x, cur.y);
     ctx.rotate(Math.PI / 4);
     ctx.fillRect(-s / 2, -s / 2, s, s);
     ctx.restore();
+    ctx.shadowBlur = 0;
   }
   ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
 }
 
 function drawDragPreview() {
@@ -1095,7 +1101,9 @@ function drawDragPreview() {
   ctx.setLineDash([6, 4]);
   ctx.strokeStyle = color;
   ctx.globalAlpha = 0.5;
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.5;
+  ctx.shadowBlur = noAmmo ? 0 : 18;
+  ctx.shadowColor = '#4DFFD6';
   ctx.beginPath();
   ctx.moveTo(dragOriginX + shakeOff, dragOriginY + shakeOff);
 
@@ -1107,6 +1115,7 @@ function drawDragPreview() {
   }
   ctx.stroke();
   ctx.setLineDash([]);
+  ctx.shadowBlur = 0;
   ctx.globalAlpha = 1;
   ctx.restore();
 
@@ -1123,23 +1132,26 @@ function drawParticles(dt) {
 
     if (p.type === 'detonation') {
       const phaseGrow = 180 / p.dur;
-      if (progress < phaseGrow) {
-        const r = p.maxR * (p.t / 180);
-        ctx.globalAlpha = 0.9;
-        ctx.strokeStyle = '#4DFFD6';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-        ctx.stroke();
-      } else {
-        const fadeProgress = (p.t - 180) / 80;
-        ctx.globalAlpha = Math.max(0, 1 - fadeProgress);
-        ctx.strokeStyle = '#4DFFD6';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.maxR, 0, Math.PI * 2);
-        ctx.stroke();
-      }
+      const r = progress < phaseGrow ? p.maxR * (p.t / 180) : p.maxR;
+      const alpha = progress < phaseGrow ? 0.9 : Math.max(0, 1 - (p.t - 180) / 80);
+      // Bloom layer: wide soft glow pass
+      ctx.globalAlpha = alpha * 0.25;
+      ctx.strokeStyle = '#4DFFD6';
+      ctx.lineWidth = 6;
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = '#4DFFD6';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      // Sharp pass on top
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = '#4DFFD6';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
     } else if (p.type === 'flash') {
       ctx.globalAlpha = 1 - progress;
@@ -1155,10 +1167,13 @@ function drawParticles(dt) {
       ctx.globalAlpha = alpha * 0.8;
       ctx.strokeStyle = '#4DFFD6';
       ctx.lineWidth = 2;
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = '#4DFFD6';
       ctx.beginPath();
       ctx.moveTo(x2, y2);
       ctx.lineTo(x2 + p.ax * p.len, y2 + p.ay * p.len);
       ctx.stroke();
+      ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
     } else if (p.type === 'deathLine') {
       const alpha = 1 - progress;
@@ -1294,8 +1309,10 @@ function drawIdleAnimation() {
 
   // Ghost interceptor
   if (ghostInterceptor) {
+    ctx.shadowBlur = 18;
+    ctx.shadowColor = '#4DFFD6';
     for (let i = 1; i < ghostInterceptor.trail.length; i++) {
-      const alpha = (i / ghostInterceptor.trail.length) * 0.4;
+      const alpha = (i / ghostInterceptor.trail.length) * 0.55;
       ctx.globalAlpha = alpha;
       ctx.strokeStyle = '#4DFFD6';
       ctx.lineWidth = 2;
@@ -1304,6 +1321,7 @@ function drawIdleAnimation() {
       ctx.lineTo(ghostInterceptor.trail[i].x, ghostInterceptor.trail[i].y);
       ctx.stroke();
     }
+    ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
   }
 
@@ -1325,12 +1343,15 @@ function drawIdleAnimation() {
       ctx.closePath();
       ctx.stroke();
       ctx.fillStyle = '#4DFFD6';
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = '#4DFFD6';
       ctx.globalAlpha = 0.5;
       for (let i = 0; i < 4; i++) {
         ctx.beginPath();
         ctx.arc(-w / 4 + i * (w / 6), h * 0.6, 2 * scaleRef, 0, Math.PI * 2);
         ctx.fill();
       }
+      ctx.shadowBlur = 0;
     } else if (ship.type === 'fighter') {
       const w = 16 * scaleRef, h = 10 * scaleRef;
       ctx.lineWidth = 1.5;
@@ -1365,17 +1386,17 @@ function gameLoop(timestamp) {
     updateIdleAnimation(dt);
     drawIdleAnimation();
     drawCity();
-    composer.render();
+    renderer.render(scene, camera);
     return;
   }
 
   if (gameState === 'instructions') {
-    composer.render();
+    renderer.render(scene, camera);
     return;
   }
 
   if (gameState !== 'game' && gameState !== 'gameover' && gameState !== 'win' && gameState !== 'ending') {
-    composer.render();
+    renderer.render(scene, camera);
     return;
   }
 
@@ -1394,7 +1415,7 @@ function gameLoop(timestamp) {
     if (shakeTimer <= 0) shakeActive = false;
   }
 
-  composer.render();
+  renderer.render(scene, camera);
 }
 
 function updateGame(dt) {
@@ -1752,10 +1773,8 @@ function resetGame() {
 // ─── RESIZE ──────────────────────────────────────────────────────────────────
 window.addEventListener('resize', () => {
   renderer.setSize(W(), H());
-  composer.setSize(W(), H());
   camera.aspect = W() / H();
   camera.updateProjectionMatrix();
-  bloomPass.resolution.set(W(), H());
   resizeOverlay();
   generateCity();
   if (gameState === 'game') buildHUD();
