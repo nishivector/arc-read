@@ -1356,6 +1356,7 @@ function gameLoop(timestamp) {
   lastTime = timestamp;
 
   // Clear overlay
+  if (!ctx) return;
   ctx.clearRect(0, 0, W(), H());
 
   flickerTime += dt / 1000;
@@ -1373,7 +1374,7 @@ function gameLoop(timestamp) {
     return;
   }
 
-  if (gameState !== 'game' && gameState !== 'gameover' && gameState !== 'win') {
+  if (gameState !== 'game' && gameState !== 'gameover' && gameState !== 'win' && gameState !== 'ending') {
     composer.render();
     return;
   }
@@ -1469,9 +1470,18 @@ function updateGame(dt) {
     e.y += e.vy * dt / 1000;
 
     // Wave 1 bounce
-    if (e.special === 'wave1bounce' && e.y > ch * 0.85) {
-      e.vy = -Math.abs(e.vy) * 0.7;
-      if (e.vy > -10) { e.alive = false; waveEnemiesKilled++; }
+    if (e.special === 'wave1bounce' && e.y > ch * 0.82) {
+      const speed = Math.abs(e.vy);
+      if (speed < 15) {
+        e.alive = false;
+      } else {
+        e.vy = -speed * 0.6;
+        e.y = ch * 0.82 - 1;
+      }
+    }
+    // Also remove if it bounces way off screen top
+    if (e.special === 'wave1bounce' && e.y < -200) {
+      e.alive = false;
     }
 
     // City hit
